@@ -4,36 +4,37 @@
 
 **Live service:** [https://trust.nsgoods.org](https://trust.nsgoods.org) · **Methodology:** [https://trust.nsgoods.org/methodology](https://trust.nsgoods.org/methodology)
 
-The service indexes the canonical ERC-8004 IdentityRegistry + ReputationRegistry on Base mainnet, computes a transparent trust score from the on-chain feedback, and serves it through an x402 paywall ($0.005 USDC per call). Every paid response is signed; verifying clients can ecrecover and prove authenticity.
+The service indexes the canonical ERC-8004 IdentityRegistry + ReputationRegistry on every supported chain — currently **ethereum, base, polygon, bsc, mantle** — computes a transparent trust score from the on-chain feedback, and serves it through an x402 paywall ($0.005 USDC per call on Base mainnet). Every paid response is signed; verifying clients can ecrecover and prove authenticity. Default chain is `ethereum` (where ~99% of agent activity actually lives in mid-2026). Identity is per-chain — we do not merge agent IDs across chains.
 
 ---
 
 ## What it actually does
 
-1. **Indexer** (`indexer.py`) scans `Registered`, `NewFeedback`, and `FeedbackRevoked` events from the two canonical registries in 9,500-block chunks, rotating across several free Base RPCs. Idempotent: stores `last_scanned_block` in `data/state.json` and resumes from there.
+1. **Indexer** (`indexer.py`) scans `Registered`, `NewFeedback`, and `FeedbackRevoked` events from the two canonical registries on every wired chain in 9,500-block chunks, rotating across multiple free RPCs. Idempotent per chain: each chain has its own `data/<chain>/state.json` and resumes from there.
 
-2. **Scoring** (`scoring.py`) combines four components into a 0–100 score:
+2. **Scoring** (`scoring.py`) combines four components into a 0–100 score, keyed on `(chain, agent_id)`:
 
    | Component | Weight | Measures |
    |---|---|---|
    | `value_avg` | 0.50 | Mean of feedback values, normalised −100..100 → 0..100 |
    | `client_breadth` | 0.20 | Log-scaled count of distinct client addresses |
    | `volume` | 0.15 | Log-scaled count of (non-revoked) feedback entries |
-   | `recency` | 0.15 | Recency-weighted mean of values (~28h half-life) |
+   | `recency` | 0.15 | Recency-weighted mean of values (~28h half-life on Base block time) |
 
-   **Refusal threshold**: if fewer than 3 distinct clients have left feedback, the score is `null` with `status="insufficient_data"`. This is the single largest sybil-mitigation lever in v1 — we'd rather say "we don't know" than fabricate a score from one client.
+   **Refusal threshold**: if fewer than 3 distinct clients have left feedback for the agent, the score is `null` with `status="insufficient_data"`. This is the single largest sybil-mitigation lever in v1 — we'd rather say "we don't know" than fabricate a score from one client.
 
-3. **API** (`app.py`) is a Flask service behind the x402 payment middleware. Five endpoints:
+3. **API** (`app.py`) is a Flask service behind the x402 payment middleware. Endpoints:
 
    | Endpoint | Price | Behaviour |
    |---|---|---|
    | `GET /` | free | landing |
-   | `GET /health` | free | service liveness + universe summary |
+   | `GET /health` | free | per-chain summary (agents / feedback / latest block) |
    | `GET /methodology` | free | full scoring math (pulled live from `scoring.py`) |
    | `GET /llms.txt` | free | AI-discovery feed |
-   | `GET /.well-known/x402` | free | x402 manifest |
-   | `GET /agent-trust/preview` | free | demo score for one sample agent |
-   | `GET /agent-trust?agent=<id>` | **$0.005 USDC (Base mainnet)** | signed JSON: score + breakdown + sources + methodology link |
+   | `GET /.well-known/x402` | free | x402 manifest with `chain` param schema |
+   | `GET /provable/head` + `/provable/verify` | free | tamper-evident snapshot chain |
+   | `GET /agent-trust/preview` | free | demo score (a real Ethereum agent with sufficient data) |
+   | `GET /agent-trust?agent=<id>&chain=<name>` | **$0.005 USDC (Base mainnet)** | signed JSON: per-(chain, agent) score + breakdown + sources + methodology link. `chain` defaults to `ethereum`. |
 
 ## Example response
 
@@ -85,11 +86,20 @@ recovered = Account.recover_message(encode_defunct(text=canonical), signature=si
 assert recovered.lower() == claimed.lower()    # authentic & untampered
 ```
 
-## Sources (read-only, Base mainnet — chain id 8453)
+## Sources (read-only, canonical on every chain)
 
 - `IdentityRegistry`   `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
 - `ReputationRegistry` `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`
 - Event topics in `indexer.py` (Registered, NewFeedback, FeedbackRevoked)
+- Wired chain ids: 1 (ethereum), 8453 (base), 137 (polygon), 56 (bsc), 5000 (mantle)
+
+### Why Ethereum-primary?
+
+A probe on 2026-06-16 found agent counts of approximately **34,800 (ethereum), 17 (base), 3 (bsc), 0 (polygon), 0 (mantle)**. Defaulting `chain=ethereum` matches where the actual ERC-8004 market currently lives.
+
+### Cross-chain identity is per-chain
+
+We do **not** merge agent IDs across chains. The probe found **zero owner wallets** registered on more than one chain, so an "operator view" (merge by owner wallet) has no signal yet. We'll add it once that changes.
 
 ## Running locally
 
