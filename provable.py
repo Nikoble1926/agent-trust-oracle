@@ -1,17 +1,13 @@
-"""Tamper-evident hash chain of trust-score snapshots.
+"""Cross-chain tamper-evident hash chain of trust-score snapshots.
 
 After each indexer pass we append a single entry to ``data/scores_chain.jsonl``
-containing the current score for every agent in scope. The entry hash folds in
-the previous entry's hash, so any retroactive edit breaks every subsequent hash
-and the next ``verify()`` fails.
+containing the current score for every (chain, agent_id) in scope. The entry
+hash folds in the previous entry's hash; any retroactive edit breaks every
+subsequent hash and the next ``verify()`` fails.
 
-Stdlib only — no third-party deps — so it runs standalone:
+Stdlib only — no third-party deps. Standalone CLI:
 
     python3 provable.py verify     # -> "CHAIN OK (N entries) head=..."
-
-The trust_oracle indexer.py invokes ``append_snapshot()`` at the end of each
-run and (best-effort) pushes the updated chain to the public GitHub repo as a
-third-party timestamp anchor.
 """
 from __future__ import annotations
 
@@ -38,117 +34,103 @@ def _hash(obj_without_h: dict) -> str:
 
 
 def _iter_entries() -> Iterable[dict]:
-    if not CHAIN_PATH.exists():
-        return
+    if not CHAIN_PATH.exists(): return
     with CHAIN_PATH.open("r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
-            if not line:
-                continue
+            if not line: continue
             yield json.loads(line)
 
 
-def _read_tail() -> tuple[int, str, list[dict] | None]:
-    """Return (last_seq, last_h, last_agents_or_None)."""
+def _read_tail() -> tuple[int, str, list[dict] | None, int | None]:
+    """Return (last_seq, last_h, last_entries_list, last_total_latest_blocks_sum_or_None)."""
     last_seq = -1
     last_h = GENESIS_PREV
-    last_agents = None
+    last_entries = None
+    last_per_chain_blocks_sum: int | None = None
     for e in _iter_entries():
         last_seq = e["seq"]
         last_h = e["h"]
-        last_agents = e.get("agents")
-    return last_seq, last_h, last_agents
+        last_entries = e.get("chains")
+        # Sum the latest_block across all chains in this entry — used as a quick
+        # idempotency signal alongside the per-chain entries list comparison.
+        if isinstance(last_entries, list):
+            try:
+                last_per_chain_blocks_sum = sum(int(c.get("latest_block", 0)) for c in last_entries)
+            except Exception:
+                last_per_chain_blocks_sum = None
+    return last_seq, last_h, last_entries, last_per_chain_blocks_sum
 
 
-def _scores_snapshot() -> tuple[int, list[dict]]:
-    """Compute current scores for the agent universe in a deterministic shape."""
-    from scoring import compute_score, list_agents, feedback_universe  # local import = stdlib-only at module load
-
-    universe = feedback_universe()
-    agent_ids = sorted(set(list_agents()) | set(universe["agents_with_feedback"]))
-    latest_block = universe.get("latest_block_seen", 0)
+def _scores_snapshot() -> list[dict]:
+    """Return a deterministic-ordered list of per-chain blocks.
+    Each block: {chain, latest_block, agents: [{agent_id, score, status, feedback_count, distinct_clients}]}
+    Empty chains are included with agents=[] so the snapshot covers every wired
+    chain — useful evidence later that 'we looked, there was nothing'."""
+    from scoring import compute_score, list_agents, feedback_universe, known_chains
 
     out: list[dict] = []
-    for aid in agent_ids:
-        s = compute_score(aid, latest_block_hint=latest_block)
-        inputs = s.get("inputs", {})
+    for chain in sorted(known_chains()):
+        universe = feedback_universe(chain)
+        agent_ids = sorted(set(list_agents(chain)) | set(universe["agents_with_feedback"]))
+        latest_block = universe.get("latest_block_seen", 0)
+        agents_block: list[dict] = []
+        for aid in agent_ids:
+            s = compute_score(chain, aid, latest_block_hint=latest_block)
+            inputs = s.get("inputs", {})
+            agents_block.append({
+                "agent_id":         aid,
+                "score":            s.get("score"),
+                "status":           s.get("status"),
+                "feedback_count":   inputs.get("feedback_count", 0),
+                "distinct_clients": inputs.get("distinct_clients", 0),
+            })
         out.append({
-            "agent_id":         aid,
-            "score":            s.get("score"),
-            "status":           s.get("status"),
-            "feedback_count":   inputs.get("feedback_count", 0),
-            "distinct_clients": inputs.get("distinct_clients", 0),
+            "chain":        chain,
+            "latest_block": latest_block,
+            "agents":       agents_block,
         })
-    return latest_block, out
-
-
-def _agents_equal(a: list[dict] | None, b: list[dict]) -> bool:
-    """Idempotency check: agents lists are equal as sets of (id,score,status,counts)."""
-    if a is None:
-        return False
-    return _canonical(a) == _canonical(b)
+    return out
 
 
 def append_snapshot() -> dict:
-    """Append a snapshot. Returns a small status dict.
-
-    Idempotent: if (latest_block + per-agent state) is unchanged from the last
-    entry we do not append.
-    """
     DATA.mkdir(parents=True, exist_ok=True)
-    last_seq, last_h, last_agents = _read_tail()
-    latest_block, agents = _scores_snapshot()
+    last_seq, last_h, last_chains, last_block_sum = _read_tail()
+    chains_block = _scores_snapshot()
+    block_sum = sum(int(c["latest_block"]) for c in chains_block)
 
-    # Idempotency: skip the append if nothing has changed.
-    # We compare both block height AND agent state — block could advance with
-    # no relevant feedback change (still a no-op), and an unchanged block could
-    # still trigger an append if the agent list shifted (defensive).
-    if last_agents is not None:
-        prev_blk = None
-        # Walk back one entry to read prev latest_block (cheap: tail-line)
-        with CHAIN_PATH.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    prev_blk = json.loads(line).get("latest_block")
-                except Exception:
-                    pass
-        if prev_blk == latest_block and _agents_equal(last_agents, agents):
-            return {
-                "appended":     False,
-                "reason":       "no_change",
-                "seq":          last_seq,
-                "head_hash":    last_h,
-                "latest_block": latest_block,
-                "n_agents":     len(agents),
-            }
+    if last_chains is not None and _canonical(last_chains) == _canonical(chains_block):
+        return {
+            "appended":     False,
+            "reason":       "no_change",
+            "seq":          last_seq,
+            "head_hash":    last_h,
+            "block_sum":    block_sum,
+            "n_chains":     len(chains_block),
+        }
 
     seq = last_seq + 1
     entry = {
-        "seq":          seq,
-        "ts_utc":       datetime.now(timezone.utc).isoformat(),
-        "latest_block": latest_block,
-        "agents":       agents,
-        "prev":         last_h,
+        "seq":      seq,
+        "ts_utc":   datetime.now(timezone.utc).isoformat(),
+        "chains":   chains_block,
+        "prev":     last_h,
     }
     entry["h"] = _hash(entry)
-
     with CHAIN_PATH.open("a", encoding="utf-8") as fh:
         fh.write(_canonical(entry) + "\n")
 
     return {
-        "appended":     True,
-        "seq":          seq,
-        "head_hash":    entry["h"],
-        "latest_block": latest_block,
-        "n_agents":     len(agents),
+        "appended":  True,
+        "seq":       seq,
+        "head_hash": entry["h"],
+        "n_chains":  len(chains_block),
+        "n_agents":  sum(len(c["agents"]) for c in chains_block),
+        "block_sum": block_sum,
     }
 
 
 def verify() -> dict:
-    """Re-hash every entry, check that prev chains correctly."""
     prev = GENESIS_PREV
     count = 0
     head = GENESIS_PREV
@@ -156,45 +138,25 @@ def verify() -> dict:
     for entry in _iter_entries():
         count += 1
         if entry.get("seq") != last_seq + 1:
-            return {
-                "ok":         False,
-                "error":      "seq_gap",
-                "at_seq":     entry.get("seq"),
-                "expected":   last_seq + 1,
-                "count":      count,
-                "head_hash":  head,
-            }
+            return {"ok": False, "error": "seq_gap", "at_seq": entry.get("seq"),
+                    "expected": last_seq + 1, "count": count, "head_hash": head}
         last_seq = entry["seq"]
         if entry.get("prev") != prev:
-            return {
-                "ok":         False,
-                "error":      "prev_mismatch",
-                "at_seq":     entry["seq"],
-                "expected":   prev,
-                "found":      entry.get("prev"),
-                "count":      count,
-                "head_hash":  head,
-            }
+            return {"ok": False, "error": "prev_mismatch", "at_seq": entry["seq"],
+                    "expected": prev, "found": entry.get("prev"),
+                    "count": count, "head_hash": head}
         stored_h = entry.get("h")
         recomputed = _hash({k: v for k, v in entry.items() if k != "h"})
         if stored_h != recomputed:
-            return {
-                "ok":         False,
-                "error":      "hash_mismatch",
-                "at_seq":     entry["seq"],
-                "expected":   recomputed,
-                "found":      stored_h,
-                "count":      count,
-                "head_hash":  head,
-            }
+            return {"ok": False, "error": "hash_mismatch", "at_seq": entry["seq"],
+                    "expected": recomputed, "found": stored_h,
+                    "count": count, "head_hash": head}
         prev = stored_h
         head = stored_h
-
     return {"ok": True, "count": count, "head_hash": head}
 
 
 def head() -> dict | None:
-    """Return the latest entry verbatim, or None if the chain is empty."""
     last: dict | None = None
     for e in _iter_entries():
         last = e
@@ -208,11 +170,10 @@ def _main(argv: list[str]) -> int:
         if r["ok"]:
             print(f"CHAIN OK ({r['count']} entries) head={r['head_hash']}")
             return 0
-        print(f"CHAIN BROKEN at seq {r.get('at_seq')}: {r.get('error')}  (had {r['count']} entries)")
+        print(f"CHAIN BROKEN at seq {r.get('at_seq')}: {r.get('error')} (had {r['count']} entries)")
         return 1
     if cmd == "append":
-        r = append_snapshot()
-        print(json.dumps(r, indent=2))
+        print(json.dumps(append_snapshot(), indent=2))
         return 0
     if cmd == "head":
         h = head()

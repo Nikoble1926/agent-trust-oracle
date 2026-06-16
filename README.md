@@ -1,6 +1,6 @@
 # Agent Trust Oracle
 
-> Read-only, pay-per-call trust scores for [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) agents on Base mainnet — served over [x402](https://github.com/coinbase/x402) with ECDSA-signed responses.
+> Read-only, pay-per-call trust scores for [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) agents across multiple EVM chains (Ethereum-primary) — served over [x402](https://github.com/coinbase/x402) with ECDSA-signed responses.
 
 **Live service:** [https://trust.nsgoods.org](https://trust.nsgoods.org) · **Methodology:** [https://trust.nsgoods.org/methodology](https://trust.nsgoods.org/methodology)
 
