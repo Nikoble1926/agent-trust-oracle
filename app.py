@@ -36,6 +36,7 @@ from scoring import (
     WEIGHTS, MIN_DISTINCT_CLIENTS, RECENCY_HALFLIFE_BLOCKS,
     VOLUME_REF, CLIENT_BREADTH_REF,
 )
+import provable
 
 ROOT = pathlib.Path(__file__).parent
 load_dotenv(ROOT / ".env")
@@ -166,6 +167,13 @@ def llms_txt():
         "## Endpoints\n"
         "- GET /agent-trust/preview — free demo score (sample agent)\n"
         f"- GET /agent-trust?agent=<id> — paid {PRICE}, returns signed score + breakdown + methodology\n"
+        "- GET /provable/head — latest hash-chain snapshot head (seq, head_hash, n_agents)\n"
+        "- GET /provable/verify — re-hash whole chain, return {ok, count, head_hash}\n"
+        "\n## Tamper-evidence\n"
+        "Every indexer run appends a sha256-chained snapshot of all current scores. "
+        "The chain is mirrored to the public repo (github.com/Nikoble1926/agent-trust-oracle/provable/scores_chain.jsonl) "
+        "so every push becomes a third-party timestamp anchor. "
+        "Verify locally with `python3 provable.py verify`.\n"
         "- GET /health — liveness + universe summary\n"
         "- GET /.well-known/x402 — machine-readable manifest\n\n"
         "## Source data\n"
@@ -188,6 +196,26 @@ def preview():
         "disclaimer":   _DISCLAIMER,
     }
     return jsonify(_signed(payload))
+
+
+@app.route("/provable/head")
+def provable_head():
+    h = provable.head()
+    if not h:
+        return jsonify({"empty": True, "message": "no snapshots yet"}), 200
+    return jsonify({
+        "seq":          h["seq"],
+        "ts_utc":       h["ts_utc"],
+        "latest_block": h["latest_block"],
+        "n_agents":     len(h.get("agents", [])),
+        "prev":         h["prev"],
+        "head_hash":    h["h"],
+    })
+
+
+@app.route("/provable/verify")
+def provable_verify():
+    return jsonify(provable.verify())
 
 
 @app.route("/methodology")
@@ -272,6 +300,7 @@ a{{color:#1d4ed8}}
 <li><code>IdentityRegistry &nbsp; 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code></li>
 <li><code>ReputationRegistry 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63</code></li>
 <li>Source code: <a href="https://github.com/Nikoble1926/agent-trust-oracle">github.com/Nikoble1926/agent-trust-oracle</a></li>
+<li>Tamper-evidence: <a href="/provable/verify">/provable/verify</a> (re-hashes the snapshot chain) and <a href="/provable/head">/provable/head</a> (latest entry). The chain itself is mirrored to <a href="https://github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl">github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl</a> so every push is a third-party timestamp anchor.</li>
 </ul>
 
 <div class="note"><strong>Signatures.</strong> Every paid <code>/agent-trust</code> response and the free <code>/agent-trust/preview</code> response carry <code>signed_by</code> + <code>signature</code>. Verify with Ethereum <code>personal_sign</code>/<code>ecrecover</code> over <code>json.dumps(payload, sort_keys=True, separators=(",",":"))</code> with the two keys stripped &mdash; <code>recover == signed_by</code> &rArr; authentic &amp; untampered. Signer: <code>{_SIGNER_ADDRESS or '(unset)'}</code>.</div>

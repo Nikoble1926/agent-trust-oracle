@@ -15,6 +15,7 @@ import pathlib
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from typing import Iterable
 
 ROOT = pathlib.Path(__file__).parent
@@ -227,7 +228,58 @@ def main() -> int:
     state["updated_at"] = int(time.time())
     _save_state(state)
     print(f"[indexer] state saved: latest={latest:,}  reg={n_reg}  fb={n_fb}  rv={n_rv}")
+
+    # Provable snapshot + best-effort GitHub timestamp anchor
+    try:
+        import provable
+        snap = provable.append_snapshot()
+        if snap.get("appended"):
+            print(f"[provable] snapshot seq={snap['seq']} head={snap['head_hash'][:16]} agents={snap['n_agents']}")
+            _anchor_to_github()
+        else:
+            print(f"[provable] no_change at seq={snap.get('seq')} (head={snap.get('head_hash','?')[:16]})")
+    except Exception as exc:
+        print(f"[provable] skipped: {exc}", file=sys.stderr)
+
     return 0
+
+
+def _anchor_to_github() -> None:
+    """Push the chain JSONL to the public repo as a third-party timestamp.
+    Wrapped in broad except — a GitHub outage must NOT break the indexer."""
+    pub = pathlib.Path("/root/agent-trust-oracle-pub")
+    if not pub.is_dir():
+        print("[anchor] public repo dir absent — skipping", file=sys.stderr)
+        return
+    try:
+        chain_src = DATA / "scores_chain.jsonl"
+        chain_dst_dir = pub / "provable"
+        chain_dst_dir.mkdir(parents=True, exist_ok=True)
+        chain_dst = chain_dst_dir / "scores_chain.jsonl"
+        chain_dst.write_bytes(chain_src.read_bytes())
+
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        msg = f"provable: score snapshot {ts}"
+        for cmd in (
+            ["git", "-C", str(pub), "add", "-f", "provable/scores_chain.jsonl"],
+            ["git", "-C", str(pub),
+             "-c", "user.name=Nikoble1926",
+             "-c", "user.email=dimitriadisn9@gmail.com",
+             "commit", "-qm", msg],
+            ["git", "-C", str(pub), "push", "-q"],
+        ):
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                # 'nothing to commit' is a normal no-op; surface other errors but don't raise.
+                if "nothing to commit" in (r.stdout + r.stderr):
+                    print("[anchor] chain unchanged — nothing to push", file=sys.stderr)
+                    return
+                print(f"[anchor] git failed ({' '.join(cmd[:4])}…): "
+                      f"stdout={r.stdout[:160]}  stderr={r.stderr[:160]}", file=sys.stderr)
+                return
+        print("[anchor] pushed to GitHub")
+    except Exception as exc:
+        print(f"[anchor] skipped: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":
