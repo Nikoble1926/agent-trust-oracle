@@ -25,6 +25,7 @@ from x402.http.middleware.flask import payment_middleware
 from x402.http.types import RouteConfig
 from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from x402.server import x402ResourceServerSync
+from x402.extensions.bazaar import declare_discovery_extension, OutputConfig
 
 from cdp.auth import GetAuthHeadersOptions, get_auth_headers
 from eth_account import Account
@@ -343,6 +344,56 @@ def agent_trust():
 
 # ---------------------------------------------------------------- middleware
 
+# ---- Bazaar discovery extension ------------------------------------------
+# Surfaces an input schema (so x402scan / Bazaar agents know the 'agent' query
+# param is required and what it means) plus an output example + schema for the
+# signed response shape. Pattern mirrors signals_api/extra_endpoints.py.
+
+_TRUST_EXAMPLE = {
+    "agent_id": 25975,
+    "result": {
+        "score": 65.57,
+        "status": "ok",
+        "components": {
+            "value_avg":      50.5,
+            "client_breadth": 88.71,
+            "volume":        100.0,
+            "recency":        50.5,
+        },
+        "inputs": {
+            "feedback_count":   1403,
+            "distinct_clients": 17,
+        },
+    },
+    "methodology": "https://trust.nsgoods.org/methodology",
+}
+
+_TRUST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "agent_id":    {"type": "integer"},
+        "result":      {"type": "object"},
+        "methodology": {"type": "string"},
+    },
+    "required": ["agent_id", "result"],
+}
+
+_BAZAAR_TRUST_EXT = declare_discovery_extension(
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent": {
+                "type": "string",
+                "description": "ERC-8004 agentId (uint256) on Base mainnet, e.g. 25975.",
+            },
+        },
+        "required": ["agent"],
+    },
+    output=OutputConfig(example=_TRUST_EXAMPLE, schema=_TRUST_SCHEMA),
+)
+_BAZAAR_TRUST_EXT["bazaar"]["info"]["input"]["method"] = "GET"
+
+
 routes = {
     "GET /agent-trust": RouteConfig(
         accepts=[PaymentOption(scheme="exact", pay_to=EVM_ADDRESS, price=PRICE, network=NETWORK)],
@@ -352,6 +403,7 @@ routes = {
             "component breakdown (value_avg / client_breadth / volume / recency) "
             "and methodology link. USDC pay-per-call on Base mainnet."
         ),
+        extensions=_BAZAAR_TRUST_EXT,
     ),
 }
 
