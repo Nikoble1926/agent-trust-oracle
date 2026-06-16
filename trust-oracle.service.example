@@ -1,0 +1,13 @@
+[Unit]
+Description=Agent Trust Oracle (x402 over ERC-8004 on Base)
+After=network.target
+
+[Service]
+WorkingDirectory=/root/trust_oracle
+ExecStart=/root/signals_api/venv/bin/gunicorn -w 2 -b 127.0.0.1:4023 app:app
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

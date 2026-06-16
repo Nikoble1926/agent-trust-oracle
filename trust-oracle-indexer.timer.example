@@ -1,0 +1,12 @@
+[Unit]
+Description=Run trust-oracle indexer hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+Unit=trust-oracle-indexer.service
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

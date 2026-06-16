@@ -1,0 +1,8 @@
+[Unit]
+Description=Agent Trust Oracle hourly chain indexer (oneshot)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/trust_oracle
+ExecStart=/root/signals_api/venv/bin/python /root/trust_oracle/indexer.py
+User=root

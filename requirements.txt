@@ -1,0 +1,6 @@
+flask>=3.0
+python-dotenv>=1.0
+eth-account>=0.13
+x402>=2.12
+cdp-sdk>=1.40
+gunicorn>=21.2
