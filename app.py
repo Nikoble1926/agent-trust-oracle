@@ -195,9 +195,13 @@ def llms_txt():
         f"- {', '.join(known_chains())} (default: {DEFAULT_CHAIN})\n"
         "- Canonical Identity/Reputation registries at the same 0x8004A1…/0x8004BA… addresses on every chain.\n\n"
         "## Tamper-evidence\n"
-        "Every indexer run appends a cross-chain sha256-chained snapshot to data/scores_chain.jsonl. "
-        "The chain is mirrored to github.com/Nikoble1926/agent-trust-oracle/provable/scores_chain.jsonl "
-        "so every push is a third-party timestamp anchor. Verify locally with `python3 provable.py verify`.\n"
+        "Every indexer run appends a sha256-chained, COMPACT snapshot to data/scores_chain.jsonl. "
+        "Each entry stores per-chain counters + sha256 of the full sorted per-agent table — "
+        "not the table itself (that stays in data/<chain>/feedback.jsonl + agents.jsonl, which is "
+        "reproducible from the on-chain logs). Anyone can recompute the table for a given chain and "
+        "check the digest with `python3 provable.py recompute <chain>`. The chain is mirrored to "
+        "github.com/Nikoble1926/agent-trust-oracle/provable/scores_chain.jsonl so every push is a "
+        "third-party timestamp anchor. Verify locally with `python3 provable.py verify`.\n"
         "\n## What this is NOT (yet)\n"
         "Identity is per-chain. We do not merge agent IDs across chains. As of 2026-06-16 zero owner "
         "wallets have agents on more than one chain — a cross-chain operator view has no signal yet. "
@@ -211,17 +215,26 @@ def provable_head():
     h = provable.head()
     if not h:
         return jsonify({"empty": True, "message": "no snapshots yet"}), 200
-    chains = h.get("chains")
-    legacy_agents = h.get("agents")
+    chains_block = h.get("chains") or []
+    per_chain = [
+        {
+            "chain":          c.get("chain"),
+            "latest_block":   c.get("latest_block"),
+            "registered":     c.get("registered"),
+            "with_feedback":  c.get("with_feedback"),
+            "agents_sha256":  c.get("agents_sha256"),
+        }
+        for c in chains_block
+    ]
     return jsonify({
-        "seq":          h["seq"],
-        "ts_utc":       h["ts_utc"],
-        "n_chains":     len(chains) if isinstance(chains, list) else (1 if legacy_agents is not None else 0),
-        "n_agents":     sum(len(c.get("agents", [])) for c in chains) if isinstance(chains, list)
-                         else (len(legacy_agents) if isinstance(legacy_agents, list) else 0),
-        "latest_block": h.get("latest_block"),  # set on legacy v1 entries
-        "prev":         h["prev"],
-        "head_hash":    h["h"],
+        "seq":              h["seq"],
+        "ts_utc":           h["ts_utc"],
+        "n_chains":         len(per_chain),
+        "total_registered":    sum((c.get("registered") or 0)    for c in per_chain),
+        "total_with_feedback": sum((c.get("with_feedback") or 0) for c in per_chain),
+        "chains":           per_chain,
+        "prev":             h["prev"],
+        "head_hash":        h["h"],
     })
 
 
@@ -307,7 +320,7 @@ a{{color:#1d4ed8}}
 <ul>
 <li>Canonical Identity/Reputation registries at <code>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</code> + <code>0x8004BAa17C55a88189AE136b182e5fdA19dE9b63</code> on every wired chain.</li>
 <li>Source code: <a href="https://github.com/Nikoble1926/agent-trust-oracle">github.com/Nikoble1926/agent-trust-oracle</a></li>
-<li>Tamper-evidence: <a href="/provable/verify">/provable/verify</a> + <a href="/provable/head">/provable/head</a>. Chain mirrored to <a href="https://github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl">github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl</a>.</li>
+<li>Tamper-evidence: <a href="/provable/verify">/provable/verify</a> + <a href="/provable/head">/provable/head</a>. Each entry stores per-chain counters + a <code>agents_sha256</code> digest of the full sorted per-agent table (not the table itself). Anyone can recompute the table from <code>data/&lt;chain&gt;/feedback.jsonl</code> and check the digest with <code>python3 provable.py recompute &lt;chain&gt;</code>. Chain mirrored to <a href="https://github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl">github.com/Nikoble1926/agent-trust-oracle/blob/main/provable/scores_chain.jsonl</a>.</li>
 </ul>
 
 <div class="note"><strong>Signatures.</strong> Every paid <code>/agent-trust</code> response and the free <code>/agent-trust/preview</code> response carry <code>signed_by</code> + <code>signature</code>. Verify with Ethereum <code>personal_sign</code>/<code>ecrecover</code> over canonical JSON (signed_by + signature stripped). Signer: <code>{_SIGNER_ADDRESS or '(unset)'}</code>.</div>
