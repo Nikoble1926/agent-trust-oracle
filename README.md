@@ -8,6 +8,10 @@ The service indexes the canonical ERC-8004 IdentityRegistry + ReputationRegistry
 
 ---
 
+## Build an agent on this API
+
+Starter template (free preview → paid pay-per-call over x402): https://github.com/Nikoble1926/agent-starter-x402
+
 ## What it actually does
 
 1. **Indexer** (`indexer.py`) scans `Registered`, `NewFeedback`, and `FeedbackRevoked` events from the two canonical registries on every wired chain in 9,500-block chunks, rotating across multiple free RPCs. Idempotent per chain: each chain has its own `data/<chain>/state.json` and resumes from there.
