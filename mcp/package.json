@@ -1,5 +1,5 @@
 {
-  "name": "agent-trust-mcp",
+  "name": "@nikosble1926/agent-trust-mcp",
   "version": "1.0.0",
   "mcpName": "io.github.Nikoble1926/agent-trust-mcp",
   "description": "MCP server bridging the Agent Trust Oracle x402 API: a free ERC-8004 trust-score preview plus pay-per-call USDC-on-Base signed agent trust scores across 5 EVM chains (Ethereum, Base, BSC, Mantle, Polygon) for Claude Desktop, Cursor and any MCP client.",
