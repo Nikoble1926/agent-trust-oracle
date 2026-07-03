@@ -19,7 +19,7 @@ Add this to your client config and you're done — `npx` fetches and runs it:
   "mcpServers": {
     "agent-trust": {
       "command": "npx",
-      "args": ["-y", "agent-trust-mcp"]
+      "args": ["-y", "@nikosble1926/agent-trust-mcp"]
     }
   }
 }
@@ -33,7 +33,7 @@ add a low-balance Base wallet key:
   "mcpServers": {
     "agent-trust": {
       "command": "npx",
-      "args": ["-y", "agent-trust-mcp"],
+      "args": ["-y", "@nikosble1926/agent-trust-mcp"],
       "env": {
         "EVM_PRIVATE_KEY": "0x<your-low-balance-base-wallet-private-key>"
       }
