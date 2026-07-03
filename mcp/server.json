@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.Nikoble1926/agent-trust-mcp",
+  "description": "ERC-8004 agent trust scores via x402: free preview + paid USDC-on-Base signed trust scores across 5 EVM chains",
+  "status": "active",
+  "repository": { "url": "https://github.com/Nikoble1926/agent-trust-oracle", "source": "github", "subfolder": "mcp" },
+  "version": "1.0.0",
+  "packages": [{
+    "registryType": "npm",
+    "registryBaseUrl": "https://registry.npmjs.org",
+    "identifier": "agent-trust-mcp",
+    "version": "1.0.0",
+    "transport": { "type": "stdio" },
+    "environmentVariables": [
+      { "description": "Optional. Base wallet private key (0x...) for a low-balance hot wallet with a little USDC. Required only for the paid tool; the free get_trust_preview works without it. Never use your main wallet.", "format": "string", "isSecret": true, "name": "EVM_PRIVATE_KEY" },
+      { "description": "Optional. Override the trust API base URL. Defaults to https://trust.nsgoods.org.", "format": "string", "default": "https://trust.nsgoods.org", "name": "RESOURCE_SERVER_URL" }
+    ]
+  }]
+}
