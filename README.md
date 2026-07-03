@@ -59,7 +59,7 @@ Each indexer run appends a sha256-chained snapshot to `data/scores_chain.jsonl`,
 - Wired chain ids: 1 (ethereum), 8453 (base), 137 (polygon), 56 (bsc), 5000 (mantle)
 
 ## Discovery
-Listed on **[x402scan](https://www.x402scan.com)** (as *Agent Trust Oracle*) and the **[x402 Bazaar](https://docs.cdp.coinbase.com/x402/bazaar)** (CDP Facilitator) — agents can find this API via Bazaar semantic search / merchant lookup. Settlement runs through the [Coinbase CDP Facilitator](https://docs.cdp.coinbase.com/x402).
+Listed on **[x402scan](https://www.x402scan.com/server/9c03b4e2-4013-422a-9832-19672cf68a60)** (as *Agent Trust Oracle*) and the **[x402 Bazaar](https://docs.cdp.coinbase.com/x402/bazaar)** (CDP Facilitator) — agents can find this API via Bazaar semantic search / merchant lookup. Settlement runs through the [Coinbase CDP Facilitator](https://docs.cdp.coinbase.com/x402).
 
 ## Use with Claude Desktop / Cursor (MCP)
 Wire the oracle into **Claude Desktop**, **Cursor**, or any MCP client as tools — no clone, no build. Add this to your client config and `npx` fetches and runs it:
