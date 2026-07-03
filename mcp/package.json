@@ -1,0 +1,20 @@
+{
+  "name": "agent-trust-mcp",
+  "version": "1.0.0",
+  "mcpName": "io.github.Nikoble1926/agent-trust-mcp",
+  "description": "MCP server bridging the Agent Trust Oracle x402 API: a free ERC-8004 trust-score preview plus pay-per-call USDC-on-Base signed agent trust scores across 5 EVM chains (Ethereum, Base, BSC, Mantle, Polygon) for Claude Desktop, Cursor and any MCP client.",
+  "type": "module",
+  "bin": { "agent-trust-mcp": "dist/server.js" },
+  "main": "dist/server.js",
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "build": "tsc", "prepublishOnly": "npm run build", "start": "node dist/server.js", "dev": "tsx server.ts" },
+  "keywords": ["mcp","model-context-protocol","x402","base","usdc","erc-8004","agent-trust","reputation","agentic-commerce"],
+  "repository": { "type": "git", "url": "git+https://github.com/Nikoble1926/agent-trust-oracle.git", "directory": "mcp" },
+  "homepage": "https://github.com/Nikoble1926/agent-trust-oracle/tree/main/mcp#readme",
+  "bugs": { "url": "https://github.com/Nikoble1926/agent-trust-oracle/issues" },
+  "author": "Nikoble1926",
+  "license": "MIT",
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.9.0", "@x402/axios": "latest", "@x402/evm": "latest", "axios": "^1.13.2", "dotenv": "^16.4.5", "viem": "^2.39.0", "zod": "^3.23.8" },
+  "devDependencies": { "@types/node": "^20.19.43", "tsx": "^4.19.0", "typescript": "^5.6.0" }
+}
