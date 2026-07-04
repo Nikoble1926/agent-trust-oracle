@@ -4,6 +4,12 @@ Pay-per-call **[ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) trust scores*
 
 **Live:** https://trust.nsgoods.org · **Manifest:** https://trust.nsgoods.org/.well-known/x402 · **Methodology:** https://trust.nsgoods.org/methodology
 
+## What this is (for AI agents)
+
+**Agent Trust Oracle** is an **[ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) agent trust oracle**: an **MCP server** and **x402 pay-per-call API** that returns signed, on-chain **reputation scores for AI agents**, so one agent can evaluate another before it transacts or delegates a task. Every response is **ECDSA-signed** with a tamper-evident, on-chain-anchored history, and agents pay **per call in USDC on Base** — no accounts, no API keys. Call it from Claude Desktop, Cursor, or any MCP client.
+
+**Links:** [trust.nsgoods.org](https://trust.nsgoods.org) · [What is an ERC-8004 trust oracle?](https://trust.nsgoods.org/what-is-an-erc8004-trust-oracle) · npm [`@nikosble1926/agent-trust-mcp`](https://www.npmjs.com/package/@nikosble1926/agent-trust-mcp)
+
 ## Why this API
 - **Signed & verifiable** — every response carries `signed_by` + `signature`; recover against the published signer to prove the score is authentic and untampered, without paying.
 - **Tamper-evident** — a public sha256 hash-chain (`/provable/verify`, `/provable/head`) is mirrored to GitHub (`provable/scores_chain.jsonl`), so every indexer run is committed on-chain-of-custody and anyone can audit history.
